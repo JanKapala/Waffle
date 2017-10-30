@@ -4,6 +4,8 @@
 #include <vector>
 #include <random>
 #include <time.h>
+#include <cstdio>
+#include <ctime>
 
 //(-1,-1) <=> wolne pole
 //(-2,-2) <=> zablokowane pole
@@ -20,11 +22,15 @@ struct waffle
 	int amount_of_inserted;
 
 	waffle(int L);
+	waffle(const waffle &init);
 	void random(int percent);
 	void standard_cover();
 	void free_cover();
 	void print();
+	void print(int level);
 	int how_much_free();
+	
+	~waffle();
 };
 
 waffle::waffle(int L)
@@ -35,6 +41,27 @@ waffle::waffle(int L)
 	for (int i = 0; i < L; i++) cell[i] = new state[L];
 }
 
+waffle::waffle(const waffle &init)
+{
+	size = init.size;
+	amount_of_inserted = init.amount_of_inserted;
+	cell = new state*[init.size];
+	for (int i = 0; i < init.size; i++) cell[i] = new state[init.size];
+	for (int i = 0; i < size; i++)
+	{
+		for (int j = 0; j < size; j++)
+		{
+			cell[i][j] = init.cell[i][j];
+		}
+	}
+}
+
+waffle::~waffle()
+{
+	for (int i = 0; i < size; i++) delete[] this->cell[i];
+	delete[] this->cell;
+}
+
 void waffle::print()
 {
 	for (int i = 0; i < size; i++)
@@ -43,10 +70,29 @@ void waffle::print()
 		{
 			if (cell[i][j] == FREE) cout << char(176);//puste pole
 			else if (cell[i][j] == BLOCKED) cout << char(178);//zablokowane pole
-			else if (cell[i][j] == RIGHT) cout << char(205);//poziomy klocek
-			else if (cell[i][j] == LEFT) cout << char(205);//poziomy klocek
-			else if (cell[i][j] == UP) cout << char(186);//pionowy klocek
-			else if (cell[i][j] == DOWN) cout << char(186);//pionowyy klocek
+			else if (cell[i][j] == RIGHT) cout << 'R';//poziomy klocek
+			else if (cell[i][j] == LEFT) cout << 'L';//poziomy klocek
+			else if (cell[i][j] == UP) cout << 'U';//pionowy klocek
+			else if (cell[i][j] == DOWN) cout << 'D';//pionowyy klocek
+			cout << " ";
+		}
+		cout << endl;
+	}
+}
+
+void waffle::print(int level)
+{
+	for (int i = 0; i < size; i++)
+	{
+		for (int a = 0; a < level; a++) cout << "	";
+		for (int j = 0; j < size; j++)
+		{
+			if (cell[i][j] == FREE) cout << char(176);//puste pole
+			else if (cell[i][j] == BLOCKED) cout << char(178);//zablokowane pole
+			else if (cell[i][j] == RIGHT) cout << 'R';//poziomy klocek
+			else if (cell[i][j] == LEFT) cout << 'L';//poziomy klocek
+			else if (cell[i][j] == UP) cout << 'U';//pionowy klocek
+			else if (cell[i][j] == DOWN) cout << 'D';//pionowyy klocek
 			cout << " ";
 		}
 		cout << endl;
@@ -108,6 +154,191 @@ int waffle::how_much_free()
 	return result;
 }
 
+void write_a_to_b(waffle* a, waffle* b)
+{
+	if (a->size != b->size)
+	{
+		cout << "ERROR: funkcja write_a_to_b: rozne rozmiary tablic argumentow a i b" << endl;
+		return;
+	}
+	for (int i = 0; i < a->size; i++)
+	{
+		for (int j = 0; j < a->size; j++)
+		{
+			b->cell[i][j] = a->cell[i][j];
+		}
+	}
+}
+
+void recur(int i, int j, waffle* input, waffle* propagation_map_pointer, waffle copy, int* result_pointer, bool* finish,int level=0)
+{
+	//WARUNEK NIEODWIEDZONEGO POLA
+	//Jezeli propagacja dotarla do tego pola to nie wywolujemy tutaj rekurencji
+	if (propagation_map_pointer->cell[i][j] == BLOCKED) return;
+
+	//WARUNEK WSTAWIENIA KLOCKA I ZAMKNIECIA DRZEWA WYOWLAN:
+	//Sprawdzamy czy mozna wstawic klocek na jeden z czterech sposobow tak, aby jedna jego kostka znajdowala sie w polu (i,j)
+
+	bool if_inserted = false;//Flaga sprawdzajaca czy wstawienie zostalo wykonane
+
+	//pole na gorze
+	if (i - 1 >= 0 && copy.cell[i - 1][j] == FREE)
+	{
+		copy.cell[i - 1][j] = DOWN;
+		copy.cell[i][j] = UP;
+		if_inserted = true;
+	}
+	//pole na prawo
+	else if (j + 1 < copy.size && copy.cell[i][j + 1] == FREE)
+	{
+		copy.cell[i][j + 1] = LEFT;
+		copy.cell[i][j] = RIGHT;
+		if_inserted = true;
+	}
+	//pole na dole
+	else if (i + 1 < copy.size && copy.cell[i + 1][j] == FREE)
+	{
+		copy.cell[i + 1][j] = UP;
+		copy.cell[i][j] = DOWN;
+		if_inserted = true;
+	}
+	//pole na lewo
+	else if (j - 1 >= 0 && copy.cell[i][j - 1] == FREE)
+	{
+		copy.cell[i][j - 1] = RIGHT;
+		copy.cell[i][j] = LEFT;
+		if_inserted = true;
+	}
+
+	//Sprawdzenie na podstawie flagi czy wstawienie zostalo wykonane, jesli tak to rekurencja sie konczy(zamykane jest drzewo wywolan):
+	if (if_inserted)
+	{
+		(*result_pointer)++;
+		write_a_to_b(&copy, input);
+		*finish = true;
+		return;
+	}
+
+	//Jesli nic nie wstawiono to:
+	//DODANIE AKTUALNEGO POLA DO MAPY PROPAGACJI
+	propagation_map_pointer->cell[i][j] = BLOCKED;
+
+	//Wydruk kontrolny
+	//for (int a = 0; a < level; a++) cout << "	";
+	//cout << "Mapa propagacji:" << endl;
+	//propagation_map_pointer->print(level);
+	//cout << endl;
+	//for (int a = 0; a < level; a++) cout << "	";
+	//cout << "Mapa stanu tej kopii:" << endl;
+	//copy.print(level);
+
+	//Skoro kazde sasiadujace pole jest zajete(lub zablokowane lub nie istnieje) to rozpatrujemy wszystkie mozliwosci przesuniecia sasiednich klockow
+	//ROZPATRYWNIE PRZESUNIEC
+
+	//pole na gorze
+	if (i - 1 >= 0 && !(*finish))
+	{
+		waffle new_copy = copy;
+		switch (new_copy.cell[i - 1][j])
+		{
+		case UP:
+			new_copy.cell[i][j] = UP;
+			new_copy.cell[i - 1][j] = DOWN;
+			new_copy.cell[i - 2][j] = FREE;
+			recur(i - 2, j, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case RIGHT:
+			new_copy.cell[i][j] = UP;
+			new_copy.cell[i - 1][j] = DOWN;
+			new_copy.cell[i - 1][j + 1] = FREE;
+			recur(i - 1, j + 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case LEFT:
+			new_copy.cell[i][j] = UP;
+			new_copy.cell[i - 1][j] = DOWN;
+			new_copy.cell[i - 1][j - 1] = FREE;
+			recur(i - 1, j - 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+		}
+	}
+
+	//pole na dole
+	if (i + 1 < copy.size && !(*finish))
+	{
+		waffle new_copy(copy);
+		switch (new_copy.cell[i + 1][j])
+		{
+		case DOWN:
+			new_copy.cell[i][j] = DOWN;
+			new_copy.cell[i + 1][j] = UP;
+			new_copy.cell[i + 2][j] = FREE;
+			recur(i + 2, j, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case RIGHT:
+			new_copy.cell[i][j] = DOWN;
+			new_copy.cell[i + 1][j] = UP;
+			new_copy.cell[i + 1][j + 1] = FREE;
+			recur(i + 1, j + 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case LEFT:
+			new_copy.cell[i][j] = DOWN;
+			new_copy.cell[i + 1][j] = UP;
+			new_copy.cell[i + 1][j - 1] = FREE;
+			recur(i + 1, j - 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+		}
+	}
+
+	//pole na lewo
+	if (j - 1 >= 0 && !(*finish))
+	{
+		waffle new_copy(copy);
+		switch (new_copy.cell[i][j-1])
+		{
+		case LEFT:
+			new_copy.cell[i][j] = LEFT;
+			new_copy.cell[i][j-1] = RIGHT;
+			new_copy.cell[i][j-2] = FREE;
+			recur(i, j - 2, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case UP:
+			new_copy.cell[i][j] = LEFT;
+			new_copy.cell[i][j - 1] = RIGHT;
+			new_copy.cell[i - 1][j - 1] = FREE;
+			recur(i - 1, j - 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case DOWN:
+			new_copy.cell[i][j] = LEFT;
+			new_copy.cell[i][j - 1] = RIGHT;
+			new_copy.cell[i + 1][j - 1] = FREE;
+			recur(i + 1, j - 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+		}
+	}
+
+	//pole na prawo
+	if (j + 1 < copy.size && !(*finish))
+	{
+		waffle new_copy(copy);
+		switch (new_copy.cell[i][j + 1])
+		{
+		case RIGHT:
+			new_copy.cell[i][j] = RIGHT;
+			new_copy.cell[i][j + 1] = LEFT;
+			new_copy.cell[i][j + 2] = FREE;
+			recur(i, j + 2, input, propagation_map_pointer, new_copy, result_pointer, finish, level+1);
+			break;
+		case UP:
+			new_copy.cell[i][j] = RIGHT;
+			new_copy.cell[i][j + 1] = LEFT;
+			new_copy.cell[i - 1][j + 1] = FREE;
+			recur(i - 1, j + 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+			break;
+		case DOWN:
+			new_copy.cell[i][j] = RIGHT;
+			new_copy.cell[i][j + 1] = LEFT;
+			new_copy.cell[i + 1][j + 1] = FREE;
+			recur(i + 1, j + 1, input, propagation_map_pointer, new_copy, result_pointer, finish, level + 1);
+		}
+	}
+}
 
 int solve(waffle* input)
 {
@@ -124,107 +355,60 @@ int solve(waffle* input)
 											 //Uwaga: w mapie propagacji sa uzywane tylko dwie mozliwe wartosci "state" w nastepujacym znaczeniu:
 											 //	BLOCKED - oznacza, ze do tego pola propagacja juz dotarla i pole jest zamkniete na propagacje
 											 //	FREE - oznacza, ze do tego pola propagacja jeszcze nie dotarla i jest ono na nia otwarte
-											 //
 				bool finish = false;
-
+				recur(i, j, input, &propagation_map, (*input), &result, &finish);
 			}
 		}
 	}
-}
-
-
-
-void recur(int i, int j, waffle* input, waffle* propagation_map_pointer, waffle copy, int* result_pointer, bool* finish)
-{
-	//WARUNEK WSTAWIENIA KLOCKA I ZAMKNIECIA DRZEWA WYOWLAN:
-	//Sprawdzamy czy mozna wstawic klocek na jeden z czterech sposobow tak, aby jedna jego kostka znajdowala sie w polu (i,j)
-
-	bool if_inserted = false;//Flaga sprawdzajaca czy wstawienie zostalo wykonane
-
-							 //pole na gorze
-	if (i - 1 >= 0 && copy.cell[i - 1][j] == FREE)
-	{
-		copy.cell[i - 1][j] = DOWN;
-		copy.cell[i][j] = UP;
-		if_inserted = true;
-	}
-	//pole na prawo
-	else if (j + 1 < copy.size && copy.cell[i][j + 1] == FREE)
-	{
-		copy.cell[i][j + 1] = LEFT;
-		copy.cell[i][j] = RIGHT;
-		(*result_pointer)++;
-		if_inserted = true;
-	}
-	//pole na dole
-	else if (i + 1 < copy.size && copy.cell[i + 1][j] == FREE)
-	{
-		copy.cell[i + 1][j] = UP;
-		copy.cell[i][j] = DOWN;
-		if_inserted = true;
-	}
-	//pole na lewo
-	else if (j - 1 >= 0 && copy.cell[i][j - 1] == FREE)
-	{
-		copy.cell[i][j - 1] = RIGHT;
-		copy.cell[i][j] = LEFT;
-		if_inserted = true;//gestg
-	}
-
-	//Sprawdzenie na podstawie flagi czy wstawienie zostalo wykonane, jesli tak to program sie konczy:
-	if (if_inserted)
-	{
-		(*result_pointer)++;
-		*input = copy;
-		*finish = true;
-		return;
-	}
-
-	//Jesli nic nie wstawiono to:
-	//DODANIE AKTUALNEGO POLA DO MAPY PROPAGACJI
-	//Pole przekazane do tej funkcji na pewno bylo FREE, zatem nie trzeba juz tego sprawdzac i mozna je dodac do mapy propagacji
-	propagation_map_pointer->cell[i][j] = BLOCKED;
-
-	//Jezeli kazde sasiadujace pole jest zajete to rozpatrujemy wszystkie mozliwosci przesuniecia sasiednich klockow
-	//POLE NA GORZE
-	if (i - 1 >= 0)
-	{
-		if (copy.cell[i - 1][j] == UP)
-		{
-			copy.cell[i][j] = UP;
-			copy.cell[i - 1][j] = DOWN;
-			copy.cell[i - 2][j] = FREE;
-		}
-	}
+	return result;
 }
 
 int main()
 {
 	srand(time(NULL));
-	int L = 8;
 
 	/*
-	// Create
-	int L;
-	typedef vector<vector<pair<int, int>>> board1;
-
-	board1 vec(L, vector<pair<int, int>>(L));
-
-	// Write
-	vec[2][3].first = 1;
-	vec[2][3].second = 2;
-	// Read
-	cout << vec[2][3].first << " " << vec[2][3].second;
-
-	cout << endl << endl;
-	wafel abc(4);
-	*/
-
 	waffle wafelek(8);
 	wafelek.random(30);
 
 	wafelek.standard_cover();
+	cout << "Liczba wstawionych wafelkow: " << wafelek.amount_of_inserted << endl;
 	wafelek.print();
+
+	cout << "Liczba wstawionych wafelkow po procesie upychania: " << solve(&wafelek) << endl;
+	wafelek.print();
+	cout << "Done!" << endl;
+	*/
+	
+	cout << "Generowanie danych wejsciowych rozpoczete" << endl;
+	int iterations1 = 70000;
+	waffle** tab1 = new waffle*[iterations1];
+	for (int i = 0; i < iterations1; i++)
+	{
+		tab1[i] = new waffle(5);
+		tab1[i]->random(30);
+		tab1[i]->standard_cover();
+	}
+
+	int iterations2 = 1;
+	waffle** tab2 = new waffle*[iterations2];
+	for (int i = 0; i < iterations2; i++)
+	{
+		tab2[i] = new waffle(100);
+		tab2[i]->random(30);
+		tab2[i]->standard_cover();
+	}
+	cout << "Generowanie danych wejsciowych zakonczone" << endl;
+
+	cout << "Rozwiazywanie przypadkow poprawnosciowych rozpoczete:" << endl;
+	clock_t start = clock();
+	for (int i = 0; i < iterations1; i++) solve(tab1[i]);
+	cout << "Czas wykonania to: " << clock() - start << endl;
+
+	cout << "Rozwiazywanie przypadkow wydajnosciowych rozpoczete:" << endl;
+	start = clock();
+	for (int i = 0; i < iterations2; i++) solve(tab2[i]);
+	cout << "Czas wykonania to: " << clock() - start << endl;
 
 	getchar();
 	return 0;
